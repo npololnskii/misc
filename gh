@@ -1,104 +1,67 @@
-name: "Development env terraform workflow"
+Confluence uses its own wiki markup style, which is different from GitHub-flavored Markdown. Here's how your guide would look in Confluence's markup:
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - terraform/environments/dev/*
-      - terraform/modules/**
-  pull_request:
-    paths:
-      - terraform/environments/dev/*
-      - terraform/modules/**
-  workflow_dispatch:
+---
 
-env:
-  ENVIRONMENT: dev
+h2. 🛠 Setting up Environment with Terragrunt and Helm
 
-jobs:
-  terraform:
-    name: "Terraform Dev env"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+h3. 📋 Prerequisites:
+* Ensure Terraform is installed.
+* Install [Terragrunt|https://terragrunt.gruntwork.io/docs/getting-started/install/].
+* Install [Helm|https://helm.sh/docs/intro/install/].
+* Ensure `kubectl` is installed.
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v1
-        with:
-          terraform_version: 1.1
+h3. 📁 1. Copy Directory Structure and Update Region:
 
-      - name: Terraform Format
-        id: fmt
-        run: cd terraform/environments/$ENVIRONMENT; terraform fmt -check
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: eu-west-1
+Assuming you have an existing directory structure for your Terragrunt configuration:
+{code}
+# 1.1: Copy the directory
+cp -R original_env_directory new_env_directory
 
-      - name: Terraform Init
-        id: init
-        run: cd terraform/environments/$ENVIRONMENT; terraform init
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: eu-west-1
-      
-      - name: Terraform Validate
-        id: validate
-        run: cd terraform/environments/$ENVIRONMENT; terraform validate -no-color
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: eu-west-1
+# 1.2: Navigate to the new directory
+cd new_env_directory
 
-      - name: Terraform Plan
-        id: plan
-        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-        run: cd terraform/environments/$ENVIRONMENT; terraform plan -no-color
-        continue-on-error: true
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: eu-west-1
+# 1.3: Update the region in the appropriate Terragrunt or Terraform files
+sed -i 's/us-west-1/us-east-1/g' **/*.tf
+{code}
 
-      - uses: actions/github-script@0.9.0
-        if: github.event_name == 'pull_request'
-        env:
-          PLAN: "terraform\n${{ steps.plan.outputs.stdout }}\n${{ steps.plan.outputs.stderr }}"
-        with:
-          github-token: ${{ secrets.GH_TOKEN }}
-          script: |
-            const output = `
-            #### Terraform Plan for environment ${process.env.ENVIRONMENT}
-            #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
-            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
-            <details><summary>Show Plan</summary>
-            
-            \`\`\`\n
-            ${process.env.PLAN}
-            \`\`\`\n
-            
-            </details>
+h3. ⚙️ 2. Terragrunt Apply:
 
-            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
-            github.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
+To apply all your configurations with Terragrunt:
+{code}
+# 2.1: Navigate to the root of your Terragrunt configurations
+cd path_to_terragrunt_configs
 
-      - name: Terraform Plan Status
-        if: steps.plan.outcome == 'failure'
-        run: exit 1
+# 2.2: Run terragrunt to apply all
+terragrunt run-all apply
+{code}
 
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        run: cd terraform/environments/$ENVIRONMENT; terraform apply -auto-approve
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: eu-west-1
+h3. 🛡 3. Create Kubernetes Namespaces:
+
+{code}
+# 3.1: Create the 'infra' namespace
+kubectl create namespace infra
+
+# 3.2: Create the 'dev' namespace
+kubectl create namespace dev
+{code}
+
+h3. 🚀 4. Install Helm Charts:
+
+Ensure your kubeconfig points to the right Kubernetes cluster.
+{code}
+# 4.1: Add your Helm repo (replace 'your_repo_url' with the actual URL)
+helm repo add your_repo_name your_repo_url
+
+# 4.2: Update Helm repos
+helm repo update
+
+# 4.3: Install the 'infra' helm chart to the 'infra' namespace
+helm install infra-helm-release your_repo_name/chart_name --version version_number --namespace infra
+
+# 4.4: Install the 'dev' helm chart to the 'dev' namespace
+helm install dev-helm-release your_repo_name/chart_name --version version_number --namespace dev
+{code}
+
+---
+
+Please note that while Confluence supports the wiki markup, in newer versions, they have an editor that supports rich text and direct pasting of content. If you're using an older version or prefer the wiki markup, the above content should serve your purpose. If not, you might need to adapt the content in the Confluence editor.
